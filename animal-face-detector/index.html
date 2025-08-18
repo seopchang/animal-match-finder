@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>동물상 테스트</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>나는 무슨 동물상일까?</h1>
+  <p>카메라를 켜서 내 얼굴을 인식해보자!</p>
+
+  <div id="webcam-container"></div>
+  <button onclick="init()">시작하기</button>
+
+  <div id="result">
+    <h2 id="animal-label">결과가 여기에 표시돼요</h2>
+    <img id="animal-img" src="" alt="" width="200">
+  </div>
+
+  <div id="label-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
