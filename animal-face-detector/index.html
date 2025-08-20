@@ -5,13 +5,13 @@
   <title>동물상 얼굴형 테스트</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="./style.css" />
-  <!-- Teachable Machine Image -->
+  <!-- Teachable Machine (tmImage) 반드시 먼저 로드 -->
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
 </head>
 <body>
   <header class="app-header">
     <h1>동물상 얼굴형 테스트</h1>
-    <p class="subtitle">카메라 미리보기 → <b>얼굴형 찾기</b> → 잠깐의 로딩 후 결과를 보여줘요.</p>
+    <p class="subtitle">카메라 미리보기 → <b>얼굴형 찾기</b> → 1초 후 예측 → 짧은 로딩 → 결과 표시</p>
   </header>
 
   <main class="container">
@@ -19,14 +19,15 @@
     <section class="panel">
       <h2 class="panel-title">카메라 미리보기</h2>
       <div id="webcamWrap" class="webcam-wrap">
-        <div class="placeholder">카메라 준비 중…</div>
+        <div class="placeholder">카메라 꺼짐 — 아래 버튼으로 켜주세요</div>
       </div>
 
       <div class="controls">
-        <button id="predictBtn" class="btn primary">얼굴형 찾기</button>
+        <button id="startCamBtn" class="btn">카메라 켜기</button>
+        <button id="predictBtn" class="btn primary" disabled>얼굴형 찾기</button>
         <button id="resetBtn" class="btn ghost" disabled>다시하기</button>
       </div>
-      <p id="status" class="status">대기 중</p>
+      <p id="status" class="status">대기 중 (카메라 꺼짐)</p>
     </section>
 
     <!-- 우: 결과 -->
@@ -48,7 +49,7 @@
   </main>
 
   <footer class="app-footer">
-    <small>※ 카메라는 HTTPS 또는 localhost에서만 동작합니다. 브라우저 권한을 허용해 주세요.</small>
+    <small>※ 카메라는 HTTPS 또는 localhost에서만 동작합니다. 브라우저/OS 권한을 허용해 주세요.</small>
   </footer>
 
   <script src="./script.js"></script>

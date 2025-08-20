@@ -16,7 +16,7 @@ const LABEL_TO_DISPLAY = {
 };
 
 // ====== 동작 타이밍 ======
-const PREDICT_DELAY_MS = 1000;  // 버튼 누르고 1초 뒤 예측 확정
+const PREDICT_DELAY_MS = 1000;  // "얼굴형 찾기" 누르고 1초 뒤 예측 확정
 const LOADING_FPS = 3;          // 로딩 중 1초에 3장 랜덤 교체
 const LOADING_MS = 1200;        // 로딩 총 시간
 
@@ -27,6 +27,7 @@ let carouselTimer = null;
 
 // ====== DOM ======
 const webcamWrap   = document.getElementById("webcamWrap");
+const startCamBtn  = document.getElementById("startCamBtn");
 const predictBtn   = document.getElementById("predictBtn");
 const resetBtn     = document.getElementById("resetBtn");
 const statusEl     = document.getElementById("status");
@@ -68,6 +69,7 @@ function stopCarousel(){
 async function loadModel(){
   setStatus("모델 로드 중…");
   const metadataURL = MODEL_URL.replace("model.json","metadata.json");
+  // tmImage 네임스페이스는 index.html에서 CDN으로 먼저 로드됨
   model = await tmImage.load(MODEL_URL, metadataURL);
 }
 
@@ -78,12 +80,12 @@ async function startWebcam(){
   try{
     await webcam.setup({ video:true, audio:false, facingMode:"user" });
   }catch(_){
-    throw new Error("카메라 접근 실패: 브라우저 권한 또는 기기 설정을 확인하세요.");
+    throw new Error("카메라 접근 실패: 브라우저/OS 권한을 확인하세요.");
   }
   await webcam.play();
   webcamWrap.innerHTML = "";
   webcamWrap.appendChild(webcam.canvas);
-  setStatus("대기 중");
+  setStatus("카메라 ON");
 }
 
 async function predictTopOnce(){
@@ -109,18 +111,31 @@ async function resetAll(){
   stopCarousel();
   resultImg.removeAttribute("src");
   resultLabel.textContent = "아직 결과 없음";
-  setStatus("대기 중");
+  setStatus("대기 중 (카메라 ON)");
   resetBtn.disabled = true;
   predictBtn.disabled = false;
 }
 
-// ====== 초기화: 모델/웹캠 ON ======
+// ====== 초기화: 모델만 로드 (카메라는 버튼으로) ======
 (async function init(){
   try{
-    await loadModel();
-    await startWebcam();
+    await loadModel();            // 모델 먼저 로드
+    setStatus("대기 중 (카메라 꺼짐)");
   }catch(e){ handleError(e); }
 })();
+
+// ====== 버튼: 카메라 켜기 ======
+startCamBtn.addEventListener("click", async ()=>{
+  startCamBtn.disabled = true;
+  try{
+    await startWebcam();
+    predictBtn.disabled = false;  // 예측 버튼 활성화
+    resetBtn.disabled = false;
+  }catch(e){
+    alert(e.message || e);
+    startCamBtn.disabled = false;
+  }
+});
 
 // ====== 버튼: 얼굴형 찾기 ======
 predictBtn.addEventListener("click", async ()=>{
