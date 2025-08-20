@@ -1,149 +1,152 @@
-const DEFAULT_MODEL_SOURCE = "https://teachablemachine.withgoogle.com/models/9Srnd73d4/model.json";
+// ====== 고정 모델 URL (창이가 준 링크) ======
+const MODEL_URL = "https://teachablemachine.withgoogle.com/models/9Srnd73d4/model.json";
 
+// ====== 라벨 ↔ 표시텍스트/이미지 매핑 ======
+// TM 라벨은 '강아지상/고양이상/여우상/하마상'일 가능성이 높음.
+// 화면에는 '강아지형'처럼 보이게 표시 텍스트만 바꿔줌.
 const LABEL_TO_IMAGE = {
   "강아지상":"강아지상.png",
   "고양이상":"고양이상.png",
   "여우상":"여우상.png",
   "하마상":"하마상.png"
 };
-const LOADING_SEQUENCE = ["강아지상","고양이상","하마상","여우상"];
-const WARMUP_MS = 400;
+const LABEL_TO_DISPLAY = {
+  "강아지상":"강아지형",
+  "고양이상":"고양이형",
+  "여우상":"여우형",
+  "하마상":"하마형"
+};
 
-let model, webcam, currentStreamDeviceId = null;
-let isMirrored = true;
+// ====== 로딩 애니메이션 설정 ======
+const LOADING_KEYS = ["강아지상","고양이상","하마상","여우상"];
+const LOADING_FPS = 3;         // 1초당 3장
+const LOADING_MS = 1200;       // 로딩 총 시간 (원하는 만큼 조정)
+const PREDICT_DELAY_MS = 1000; // 버튼 누르고 1초 뒤 예측 확정
+
+// ====== 상태 ======
+let model = null;
+let webcam = null;
 let carouselTimer = null;
+let decidedLabel = null;
 
-const modelInput   = document.getElementById("modelInput");
-const useUrlBtn    = document.getElementById("useUrlBtn");
-const cameraSelect = document.getElementById("cameraSelect");
-const resSelect    = document.getElementById("resolutionSelect");
-const mirrorToggle = document.getElementById("mirrorToggle");
+// ====== DOM ======
 const webcamWrap   = document.getElementById("webcamWrap");
-const startBtn     = document.getElementById("startBtn");
-const retakeBtn    = document.getElementById("retakeBtn");
+const predictBtn   = document.getElementById("predictBtn");
+const resetBtn     = document.getElementById("resetBtn");
 const statusEl     = document.getElementById("status");
-
 const resultImg    = document.getElementById("resultImage");
 const resultLabel  = document.getElementById("resultLabel");
 const loadingOv    = document.getElementById("loadingOverlay");
 
-function setStatus(txt){ statusEl.textContent = txt; }
+// ====== 유틸 ======
+const setStatus = (t)=>{ statusEl.textContent = t; };
+const showOverlay = (b)=> loadingOv.classList.toggle("show", !!b);
 
-function startCarousel(){
-  stopCarousel();
-  loadingOv.classList.add("show");
-  let idx = 0;
-  carouselTimer = setInterval(()=>{
-    const key = LOADING_SEQUENCE[idx % LOADING_SEQUENCE.length];
-    resultImg.src = `./images/${LABEL_TO_IMAGE[key]}`;
-    resultLabel.textContent = "로딩 중…";
-    idx++;
-  }, 160);
-}
 function stopCarousel(){
-  if (carouselTimer) clearInterval(carouselTimer);
-  carouselTimer = null;
-  loadingOv.classList.remove("show");
+  if (carouselTimer){ clearInterval(carouselTimer); carouselTimer = null; }
+  showOverlay(false);
+}
+function startCarouselRandom(){
+  stopCarousel();
+  showOverlay(true);
+  const interval = Math.max(1, Math.floor(1000 / LOADING_FPS)); // 333ms
+  carouselTimer = setInterval(()=>{
+    const key = LOADING_KEYS[Math.floor(Math.random()*LOADING_KEYS.length)];
+    const img = LABEL_TO_IMAGE[key];
+    if (img) resultImg.src = `./images/${img}`;
+    resultLabel.textContent = "로딩 중…";
+  }, interval);
+  // 일정 시간 뒤 자동 종료
+  setTimeout(stopCarousel, LOADING_MS);
 }
 
-async function listCameras(){
-  cameraSelect.innerHTML = "";
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const cams = devices.filter(d => d.kind === "videoinput");
-  cams.forEach((d, i) => {
-    const opt = document.createElement("option");
-    opt.value = d.deviceId;
-    opt.textContent = d.label || `카메라 ${i+1}`;
-    cameraSelect.appendChild(opt);
-  });
-  if (!currentStreamDeviceId && cams[0]) currentStreamDeviceId = cams[0].deviceId;
-  if (currentStreamDeviceId) cameraSelect.value = currentStreamDeviceId;
+// ====== TM 모델/웹캠 ======
+async function loadModel(){
+  setStatus("모델 로드 중…");
+  const metadataURL = MODEL_URL.replace("model.json","metadata.json");
+  model = await tmImage.load(MODEL_URL, metadataURL);
 }
 
 async function startWebcam(){
-  const size = parseInt(resSelect.value || "640", 10);
-  webcam = new tmImage.Webcam(size, size, isMirrored);
-  await webcam.setup({ deviceId: currentStreamDeviceId ? { exact: currentStreamDeviceId } : undefined });
+  setStatus("카메라 준비 중…");
+  const size = Math.min(Math.floor(window.innerWidth*0.9), 640) || 640;
+  webcam = new tmImage.Webcam(size, size, true); // 미러
+  await webcam.setup({ video:true, audio:false, facingMode:"user" }).catch(()=>{
+    throw new Error("카메라 접근 실패: 권한 또는 브라우저 설정을 확인하세요.");
+  });
   await webcam.play();
   webcamWrap.innerHTML = "";
   webcamWrap.appendChild(webcam.canvas);
-}
-async function stopWebcam(){
-  try { if (webcam && webcam.stop) webcam.stop(); } catch(_){}
-  webcam = null;
+  setStatus("대기 중");
 }
 
-async function loadModel(source){
-  let modelURL = source;
-  let metadataURL = source.replace("model.json","metadata.json");
-  model = await tmImage.load(modelURL, metadataURL);
-}
-
-async function predictOnce(){
-  if (!webcam || !model) return;
+async function predictTopOnce(){
+  if (!model || !webcam) return null;
   webcam.update();
   const preds = await model.predict(webcam.canvas);
   preds.sort((a,b)=> b.probability - a.probability);
-  const top = preds[0];
-  showResult(top.className);
+  return preds[0]?.className || null;
 }
 
+// ====== 결과 표시 & 초기화 ======
 function showResult(label){
-  stopCarousel();
-  const imgFile = LABEL_TO_IMAGE[label];
-  if (imgFile) resultImg.src = `./images/${imgFile}`;
-  else resultImg.removeAttribute("src");
-  resultLabel.textContent = label;
+  decidedLabel = label;
+  const img = LABEL_TO_IMAGE[label];
+  const text = LABEL_TO_DISPLAY[label] || label;
+
+  if (img) resultImg.src = `./images/${img}`;
+  resultLabel.textContent = text;
   setStatus("완료");
-  retakeBtn.disabled = false;
+  resetBtn.disabled = false;
+  predictBtn.disabled = false;
 }
 
-useUrlBtn.addEventListener("click", async ()=>{
+async function resetAll(){
+  stopCarousel();
+  decidedLabel = null;
+  resultImg.removeAttribute("src");
+  resultLabel.textContent = "아직 결과 없음";
+  setStatus("대기 중");
+  resetBtn.disabled = true;
+  predictBtn.disabled = false;
+}
+
+// ====== 흐름: 초기화 → 프리뷰 켜기 ======
+(async function init(){
   try{
-    setStatus("모델 적용 중…");
-    await loadModel(modelInput.value.trim() || DEFAULT_MODEL_SOURCE);
-    setStatus("모델 준비 완료");
+    await loadModel();
+    await startWebcam();
   }catch(e){
     console.error(e);
-    setStatus("모델 로딩 실패: 주소 확인");
+    setStatus(e.message || "초기화 오류");
   }
-});
+})();
 
-cameraSelect.addEventListener("change", async (e)=>{
-  currentStreamDeviceId = e.target.value;
-  if (webcam) { await stopWebcam(); await startWebcam(); }
-});
-resSelect.addEventListener("change", async ()=>{
-  if (webcam) { await stopWebcam(); await startWebcam(); }
-});
-mirrorToggle.addEventListener("change", async (e)=>{
-  isMirrored = !!e.target.checked;
-  if (webcam) { await stopWebcam(); await startWebcam(); }
-});
-
-startBtn.addEventListener("click", async ()=>{
+// ====== 버튼: 얼굴형 찾기 ======
+predictBtn.addEventListener("click", async ()=>{
   try{
-    startBtn.disabled = true;
-    retakeBtn.disabled = true;
-    await loadModel(modelInput.value.trim() || DEFAULT_MODEL_SOURCE);
-    await listCameras();
-    await startWebcam();
-    setStatus("로딩 중…");
-    startCarousel();
-    setTimeout(async ()=>{ await predictOnce(); }, WARMUP_MS);
-  }catch(err){
-    console.error(err);
-    stopCarousel();
-    setStatus("오류: HTTPS(또는 localhost)·카메라 권한 확인");
-    startBtn.disabled = false;
+    predictBtn.disabled = true;
+    resetBtn.disabled = true;
+    setStatus("분석 준비…");
+
+    // 1) 버튼 누르고 1초 뒤 예측 확정
+    await new Promise(r => setTimeout(r, PREDICT_DELAY_MS));
+    const topLabel = await predictTopOnce();
+    if (!topLabel) throw new Error("예측 실패");
+
+    // 2) 랜덤 로딩 애니메이션 (1초당 3장, 잠깐)
+    startCarouselRandom();
+
+    // 3) 로딩이 끝난 직후 결과 노출 (LOADING_MS 뒤)
+    setTimeout(()=>{
+      showResult(topLabel);
+    }, LOADING_MS + 10);
+  }catch(e){
+    console.error(e);
+    setStatus(e.message || "오류");
+    predictBtn.disabled = false;
   }
 });
 
-retakeBtn.addEventListener("click", async ()=>{
-  retakeBtn.disabled = true;
-  setStatus("재촬영…");
-  startCarousel();
-  setTimeout(async ()=>{ await predictOnce(); }, WARMUP_MS);
-});
-
-(async function init(){ await listCameras(); setStatus("대기 중"); })();
+// ====== 버튼: 다시하기 ======
+resetBtn.addEventListener("click", resetAll);
