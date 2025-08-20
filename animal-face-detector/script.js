@@ -1,7 +1,34 @@
-// ====== 고정 모델 URL (창이가 준 링크) ======
+// ====== 0) Teachable Machine 라이브러리 보장 로더 ======
+async function ensureTmLib() {
+  if (window.tmImage && window.tmImage.Webcam) return; // 이미 로드됨
+
+  const cdnList = [
+    "https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js",
+    "https://unpkg.com/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js",
+    "https://cdn.jsdelivr.net/gh/googlecreativelab/teachablemachine-community@v0.8/dist/teachablemachine-image.min.js"
+  ];
+
+  for (const src of cdnList) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.crossOrigin = "anonymous";
+        s.referrerPolicy = "no-referrer";
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("failed: " + src));
+        document.head.appendChild(s);
+      });
+      if (window.tmImage && window.tmImage.Webcam) return;
+    } catch (_) {}
+  }
+  throw new Error("tmImage 라이브러리 로드 실패 (네트워크/차단 확인)");
+}
+
+// ====== 1) 고정 모델 URL ======
 const MODEL_URL = "https://teachablemachine.withgoogle.com/models/9Srnd73d4/model.json";
 
-// ====== 라벨 ↔ 이미지/표시 텍스트 ======
+// ====== 2) 라벨 ↔ 이미지/표시 텍스트 ======
 const LABEL_TO_IMAGE = {
   "강아지상":"강아지상.png",
   "고양이상":"고양이상.png",
@@ -15,17 +42,16 @@ const LABEL_TO_DISPLAY = {
   "하마상":"하마형"
 };
 
-// ====== 동작 타이밍 ======
+// ====== 3) 동작 타이밍 ======
 const PREDICT_DELAY_MS = 1000;  // "얼굴형 찾기" 누르고 1초 뒤 예측 확정
 const LOADING_FPS = 3;          // 로딩 중 1초에 3장 랜덤 교체
 const LOADING_MS = 1200;        // 로딩 총 시간
 
-// ====== 상태 ======
+// ====== 4) 상태/DOM ======
 let model = null;
 let webcam = null;
 let carouselTimer = null;
 
-// ====== DOM ======
 const webcamWrap   = document.getElementById("webcamWrap");
 const startCamBtn  = document.getElementById("startCamBtn");
 const predictBtn   = document.getElementById("predictBtn");
@@ -35,7 +61,7 @@ const resultImg    = document.getElementById("resultImage");
 const resultLabel  = document.getElementById("resultLabel");
 const loadingOv    = document.getElementById("loadingOverlay");
 
-// ====== 유틸 ======
+// ====== 5) 유틸 ======
 const setStatus = (t)=>{ if(statusEl) statusEl.textContent = t; };
 const showOverlay = (b)=> loadingOv.classList.toggle("show", !!b);
 function handleError(e){
@@ -57,23 +83,23 @@ function startCarouselRandom(){
     resultImg.src = `./images/${LABEL_TO_IMAGE[key]}`;
     resultLabel.textContent = "로딩 중…";
   }, interval);
-  // 자동 종료
-  setTimeout(stopCarousel, LOADING_MS);
+  setTimeout(stopCarousel, LOADING_MS); // 자동 종료
 }
 function stopCarousel(){
   if (carouselTimer){ clearInterval(carouselTimer); carouselTimer = null; }
   showOverlay(false);
 }
 
-// ====== TM 모델 & 웹캠 ======
+// ====== 6) TM 모델 & 웹캠 ======
 async function loadModel(){
+  await ensureTmLib(); // ← 반드시 먼저
   setStatus("모델 로드 중…");
   const metadataURL = MODEL_URL.replace("model.json","metadata.json");
-  // tmImage 네임스페이스는 index.html에서 CDN으로 먼저 로드됨
   model = await tmImage.load(MODEL_URL, metadataURL);
 }
 
 async function startWebcam(){
+  await ensureTmLib(); // ← 반드시 먼저
   setStatus("카메라 준비 중…");
   const size = Math.min(Math.floor(window.innerWidth * 0.9), 640) || 640;
   webcam = new tmImage.Webcam(size, size, true); // 미러
@@ -96,7 +122,7 @@ async function predictTopOnce(){
   return preds[0]?.className || null;
 }
 
-// ====== 결과 표시 & 초기화 ======
+// ====== 7) 결과/초기화 ======
 function showResult(label){
   const img = LABEL_TO_IMAGE[label];
   const text = LABEL_TO_DISPLAY[label] || label;
@@ -116,15 +142,15 @@ async function resetAll(){
   predictBtn.disabled = false;
 }
 
-// ====== 초기화: 모델만 로드 (카메라는 버튼으로) ======
+// ====== 8) 초기화 (모델만 먼저) ======
 (async function init(){
   try{
-    await loadModel();            // 모델 먼저 로드
+    await loadModel();            // tmImage 보장 + 모델 로드
     setStatus("대기 중 (카메라 꺼짐)");
   }catch(e){ handleError(e); }
 })();
 
-// ====== 버튼: 카메라 켜기 ======
+// ====== 9) 버튼 바인딩 ======
 startCamBtn.addEventListener("click", async ()=>{
   startCamBtn.disabled = true;
   try{
@@ -137,28 +163,21 @@ startCamBtn.addEventListener("click", async ()=>{
   }
 });
 
-// ====== 버튼: 얼굴형 찾기 ======
 predictBtn.addEventListener("click", async ()=>{
   try{
     predictBtn.disabled = true;
     resetBtn.disabled = true;
     setStatus("분석 준비…");
 
-    // 1) 1초 대기 후 예측 확정
-    await new Promise(r => setTimeout(r, PREDICT_DELAY_MS));
+    await new Promise(r => setTimeout(r, PREDICT_DELAY_MS)); // 1초 후 예측
     const topLabel = await predictTopOnce();
     if (!topLabel) throw new Error("예측 실패");
 
-    // 2) 랜덤 로딩(3fps) 잠깐 보여주고
-    startCarouselRandom();
-
-    // 3) 로딩 끝난 직후 결과 표시
+    startCarouselRandom(); // 짧은 로딩
     setTimeout(()=> showResult(topLabel), LOADING_MS + 10);
   }catch(e){ handleError(e); }
 });
 
-// ====== 버튼: 다시하기 ======
 resetBtn.addEventListener("click", resetAll);
 
-// 안전 종료
 window.addEventListener("beforeunload", ()=>{ try{ webcam?.stop?.(); }catch(_){} });
