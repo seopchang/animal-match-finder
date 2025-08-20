@@ -1,14 +1,106 @@
-body {
-  font-family: 'Arial';
-  text-align: center;
-  padding: 20px;
-  background-color: #f8f9fa;
+/* ===== 색/테마 ===== */
+:root{
+  --bg:#fdfdfd; --ink:#222; --muted:#666;
+  --panel:#fff; --line:#e8e8e8;
+  --chip:#fafafa; --chip-line:#ddd;
+  --primary:#6aa8ff; --primary-strong:#2f7bff;
 }
 
-#webcam-container {
-  margin: 20px auto;
+/* ===== 리셋 ===== */
+*{ box-sizing:border-box }
+html,body{ height:100% }
+body{
+  margin:0;
+  font-family: "Noto Sans KR", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  color:var(--ink);
+  background: var(--bg);
 }
 
-#result {
-  margin-top: 30px;
+/* ===== 헤더/푸터 ===== */
+.app-header,.app-footer{ text-align:center; padding:28px 16px; }
+.app-header h1{ margin:0; font-size:28px; color:#111; letter-spacing:.2px }
+.subtitle{ color:var(--muted); margin:8px 0 0; }
+
+/* ===== 레이아웃 ===== */
+.container{
+  display:grid; gap:22px; grid-template-columns:1fr 1fr;
+  max-width:1100px; margin:0 auto; padding:0 16px 28px;
+}
+.panel{
+  background: var(--panel);
+  border:1px solid var(--line); border-radius:18px; padding:16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.05);
+}
+.panel-title{ margin:4px 4px 12px; font-size:16px; color:#333; }
+
+/* ===== 웹캠 박스 ===== */
+.webcam-wrap{
+  display:flex; align-items:center; justify-content:center;
+  width:100%; min-height:340px;
+  background:#f6f8fb;
+  border:1px solid var(--line); border-radius:16px; overflow:hidden;
+}
+.placeholder{ color:#9aa8b9; padding:12px; }
+canvas, video{ display:block; width:100%; height:auto }
+
+/* ===== 버튼 ===== */
+.controls{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap }
+.btn{
+  padding:12px 16px; border-radius:12px;
+  border:1px solid #ccc; font-weight:700; cursor:pointer; transition: all .15s ease;
+}
+.btn.primary{
+  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
+  color:#fff; border:none;
+  box-shadow: 0 8px 20px rgba(47,123,255,.25);
+}
+.btn.primary:hover{ filter:brightness(1.05) }
+.btn.ghost{
+  background:#fafafa; color:#333; border:1px solid #ccc;
+}
+.btn[disabled]{ opacity:.6; cursor:not-allowed }
+
+/* ===== 상태 ===== */
+.status{ margin:10px 0 0; font-size:14px; color:var(--muted) }
+
+/* ===== 결과 카드 ===== */
+.result-card{ display:flex; flex-direction:column; align-items:center; gap:12px; }
+.result-illustration{
+  width:80%; max-width:360px; aspect-ratio:1/1;
+  background:#f6f8fb; border:1px solid var(--line); border-radius:18px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative;
+  box-shadow: 0 4px 16px rgba(0,0,0,.06);
+}
+.result-illustration img{ max-width:86%; height:auto }
+
+/* 로딩 오버레이 */
+.loading-overlay{
+  position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+  background: rgba(255,255,255,.85);
+}
+.loading-overlay.show{ display:flex }
+.spinner{
+  width:42px; height:42px; border-radius:50%;
+  border:3px solid rgba(0,0,0,.1);
+  border-top-color: var(--primary-strong);
+  animation: spin 1s linear infinite;
+  margin-right:10px;
+}
+@keyframes spin{ to{ transform: rotate(360deg) } }
+.loading-tip{ color:#333; font-weight:700 }
+
+/* 결과 라벨 */
+.result-label-wrap{ display:flex; justify-content:center; margin-top:6px }
+.result-label{
+  display:inline-block; padding:10px 14px; border-radius:999px;
+  border:1px solid var(--chip-line);
+  background: var(--chip);
+  color:#111; font-weight:800; letter-spacing:.2px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.05);
+}
+
+/* ===== 반응형 ===== */
+@media (max-width:900px){
+  .container{ grid-template-columns:1fr }
+  .result-illustration{ width:100% }
 }

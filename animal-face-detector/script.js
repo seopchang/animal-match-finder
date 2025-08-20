@@ -1,35 +1,149 @@
-const URL = "./model/";
+// ====== 고정 모델 URL (창이가 준 링크) ======
+const MODEL_URL = "https://teachablemachine.withgoogle.com/models/9Srnd73d4/model.json";
 
-let model, webcam, labelContainer, maxPredictions;
+// ====== 라벨 ↔ 이미지/표시 텍스트 ======
+const LABEL_TO_IMAGE = {
+  "강아지상":"강아지상.png",
+  "고양이상":"고양이상.png",
+  "여우상":"여우상.png",
+  "하마상":"하마상.png"
+};
+const LABEL_TO_DISPLAY = {
+  "강아지상":"강아지형",
+  "고양이상":"고양이형",
+  "여우상":"여우형",
+  "하마상":"하마형"
+};
 
-async function init() {
-    const modelURL = URL + "model.json";
-    const metadataURL = URL + "metadata.json";
+// ====== 동작 타이밍 ======
+const PREDICT_DELAY_MS = 1000;  // 버튼 누르고 1초 뒤 예측 확정
+const LOADING_FPS = 3;          // 로딩 중 1초에 3장 랜덤 교체
+const LOADING_MS = 1200;        // 로딩 총 시간
 
-    model = await tmImage.load(modelURL, metadataURL);
-    webcam = new tmImage.Webcam(200, 200, true);
-    await webcam.setup();
-    await webcam.play();
-    window.requestAnimationFrame(loop);
+// ====== 상태 ======
+let model = null;
+let webcam = null;
+let carouselTimer = null;
 
-    document.getElementById("webcam-container").appendChild(webcam.canvas);
-    labelContainer = document.getElementById("label-container");
+// ====== DOM ======
+const webcamWrap   = document.getElementById("webcamWrap");
+const predictBtn   = document.getElementById("predictBtn");
+const resetBtn     = document.getElementById("resetBtn");
+const statusEl     = document.getElementById("status");
+const resultImg    = document.getElementById("resultImage");
+const resultLabel  = document.getElementById("resultLabel");
+const loadingOv    = document.getElementById("loadingOverlay");
+
+// ====== 유틸 ======
+const setStatus = (t)=>{ if(statusEl) statusEl.textContent = t; };
+const showOverlay = (b)=> loadingOv.classList.toggle("show", !!b);
+function handleError(e){
+  console.error(e);
+  setStatus("오류: " + (e?.message || e));
+  alert("오류가 발생했어요:\n" + (e?.message || e));
+  predictBtn.disabled = false;
+  resetBtn.disabled = false;
 }
 
-async function loop() {
-    webcam.update();
-    await predict();
-    window.requestAnimationFrame(loop);
+// 로딩 애니메이션 (랜덤 이미지 교체)
+function startCarouselRandom(){
+  stopCarousel();
+  showOverlay(true);
+  const keys = Object.keys(LABEL_TO_IMAGE);
+  const interval = Math.max(1, Math.floor(1000 / LOADING_FPS));
+  carouselTimer = setInterval(()=>{
+    const key = keys[Math.floor(Math.random()*keys.length)];
+    resultImg.src = `./images/${LABEL_TO_IMAGE[key]}`;
+    resultLabel.textContent = "로딩 중…";
+  }, interval);
+  // 자동 종료
+  setTimeout(stopCarousel, LOADING_MS);
+}
+function stopCarousel(){
+  if (carouselTimer){ clearInterval(carouselTimer); carouselTimer = null; }
+  showOverlay(false);
 }
 
-async function predict() {
-    const prediction = await model.predict(webcam.canvas);
-    prediction.sort((a, b) => b.probability - a.probability);
-    const top = prediction[0];
-
-    // 결과 표시
-    document.getElementById("animal-label").innerText = `당신은 ${top.className}입니다!`;
-
-    // 동물 일러스트 보여주기
-    document.getElementById("animal-img").src = `images/${top.className}.png`;
+// ====== TM 모델 & 웹캠 ======
+async function loadModel(){
+  setStatus("모델 로드 중…");
+  const metadataURL = MODEL_URL.replace("model.json","metadata.json");
+  model = await tmImage.load(MODEL_URL, metadataURL);
 }
+
+async function startWebcam(){
+  setStatus("카메라 준비 중…");
+  const size = Math.min(Math.floor(window.innerWidth * 0.9), 640) || 640;
+  webcam = new tmImage.Webcam(size, size, true); // 미러
+  try{
+    await webcam.setup({ video:true, audio:false, facingMode:"user" });
+  }catch(_){
+    throw new Error("카메라 접근 실패: 브라우저 권한 또는 기기 설정을 확인하세요.");
+  }
+  await webcam.play();
+  webcamWrap.innerHTML = "";
+  webcamWrap.appendChild(webcam.canvas);
+  setStatus("대기 중");
+}
+
+async function predictTopOnce(){
+  if (!model || !webcam) return null;
+  webcam.update();
+  const preds = await model.predict(webcam.canvas);
+  preds.sort((a,b)=> b.probability - a.probability);
+  return preds[0]?.className || null;
+}
+
+// ====== 결과 표시 & 초기화 ======
+function showResult(label){
+  const img = LABEL_TO_IMAGE[label];
+  const text = LABEL_TO_DISPLAY[label] || label;
+  if (img) resultImg.src = `./images/${img}`;
+  resultLabel.textContent = text;
+  setStatus("완료");
+  resetBtn.disabled = false;
+  predictBtn.disabled = false;
+}
+
+async function resetAll(){
+  stopCarousel();
+  resultImg.removeAttribute("src");
+  resultLabel.textContent = "아직 결과 없음";
+  setStatus("대기 중");
+  resetBtn.disabled = true;
+  predictBtn.disabled = false;
+}
+
+// ====== 초기화: 모델/웹캠 ON ======
+(async function init(){
+  try{
+    await loadModel();
+    await startWebcam();
+  }catch(e){ handleError(e); }
+})();
+
+// ====== 버튼: 얼굴형 찾기 ======
+predictBtn.addEventListener("click", async ()=>{
+  try{
+    predictBtn.disabled = true;
+    resetBtn.disabled = true;
+    setStatus("분석 준비…");
+
+    // 1) 1초 대기 후 예측 확정
+    await new Promise(r => setTimeout(r, PREDICT_DELAY_MS));
+    const topLabel = await predictTopOnce();
+    if (!topLabel) throw new Error("예측 실패");
+
+    // 2) 랜덤 로딩(3fps) 잠깐 보여주고
+    startCarouselRandom();
+
+    // 3) 로딩 끝난 직후 결과 표시
+    setTimeout(()=> showResult(topLabel), LOADING_MS + 10);
+  }catch(e){ handleError(e); }
+});
+
+// ====== 버튼: 다시하기 ======
+resetBtn.addEventListener("click", resetAll);
+
+// 안전 종료
+window.addEventListener("beforeunload", ()=>{ try{ webcam?.stop?.(); }catch(_){} });
