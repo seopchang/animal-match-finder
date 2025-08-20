@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>동물상 테스트 – 원샷 예측</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Teachable Machine Image -->
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>동물상 테스트</h1>
+    <p>시작을 누르면 잠깐 로딩(강아지→고양이→하마→여우 순서로 이미지가 바뀜) 후, 한 번만 결과가 나옵니다.</p>
+  </header>
+
+  <main class="container">
+    <!-- 좌: 카메라/설정 -->
+    <section class="panel">
+      <div class="fieldset">
+        <label for="modelInput">Teachable Machine 모델 주소</label>
+        <div class="row">
+          <input id="modelInput" type="url"
+                 value="https://teachablemachine.withgoogle.com/models/9Srnd73d4/model.json" />
+          <button id="useUrlBtn" class="btn secondary" title="입력한 주소 사용">적용</button>
+        </div>
+        <small class="hint">※ 이미 모델 주소가 기본으로 들어가 있어요.</small>
+      </div>
+
+      <div class="grid3">
+        <div class="fieldset">
+          <label for="cameraSelect">카메라</label>
+          <select id="cameraSelect"></select>
+        </div>
+        <div class="fieldset">
+          <label for="resolutionSelect">해상도</label>
+          <select id="resolutionSelect">
+            <option value="320">320px</option>
+            <option value="480">480px</option>
+            <option value="640" selected>640px</option>
+            <option value="720">720px</option>
+          </select>
+        </div>
+        <div class="fieldset">
+          <label for="mirrorToggle">좌우반전(미러)</label>
+          <label class="switch">
+            <input id="mirrorToggle" type="checkbox" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div id="webcamWrap" class="webcam-wrap"></div>
+
+      <div class="row">
+        <button id="startBtn" class="btn">시작하기</button>
+        <button id="retakeBtn" class="btn ghost" disabled>다시 찍기</button>
+      </div>
+      <p id="status" class="status">대기 중</p>
+    </section>
+
+    <!-- 우: 결과 -->
+    <section class="panel result-panel">
+      <div class="result-illustration">
+        <img id="resultImage" alt="동물상 일러스트" />
+        <div id="loadingOverlay" class="loading-overlay">
+          <div class="loading-tip">로딩 중…</div>
+        </div>
+      </div>
+      <div class="result-label-wrap">
+        <span id="resultLabel" class="result-label">아직 결과 없음</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>※ 카메라는 HTTPS 또는 localhost에서만 동작합니다.</small>
+  </footer>
+
+  <script src="./script.js"></script>
+</body>
+</html>
